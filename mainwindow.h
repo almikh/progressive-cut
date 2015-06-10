@@ -12,22 +12,22 @@
 using std::string;
 
 class Viewport: public QGraphicsView {
-	Q_OBJECT
+    Q_OBJECT
 
 public:
-	QPixmap pixmap;
-	bool initialMarking;
-	QVector<int> source, sink;
-	QVector<int> currentSource, currentSink;
+    QPixmap pixmap;
+    bool initialMarking;
+    QVector<int> source, sink;
+    QVector<int> currentSource, currentSink;
 
-	Viewport(QWidget *parent = 0);
+    Viewport(QWidget *parent = 0);
 
-	void setPixmap(const QPixmap& pixmap);
-	void redrawNotes();
+    void setPixmap(const QPixmap& pixmap);
+    void redrawNotes();
 
-	void wheelEvent(QWheelEvent *event) override;
-	void mousePressEvent(QMouseEvent* ev) override;
-	void mouseMoveEvent(QMouseEvent* ev) override;
+    void wheelEvent(QWheelEvent *event) override;
+    void mousePressEvent(QMouseEvent* ev) override;
+    void mouseMoveEvent(QMouseEvent* ev) override;
 };
 
 namespace Ui {
@@ -38,29 +38,29 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-	QImage source;
-	cv::Mat image;
-	cv::Mat model;
-	cv::Mat marked;
-	cv::Mat userIntention;
-	QAction* showLabels;
-	cv::Mat mask;
+    QImage source;
+    cv::Mat image;
+    cv::Mat model;
+    cv::Mat marked;
+    cv::Mat userIntention;
+    QAction* showLabels;
+    cv::Mat mask;
 
     explicit MainWindow(const char* filename, QWidget *parent = 0);
     ~MainWindow();
 
 private:
-	Ui::MainWindow *ui;
-	Viewport* viewport;
+    Ui::MainWindow *ui;
+    Viewport* viewport;
 
-	cv::Mat applyMask();
-	int intention(cv::Mat model, const QVector<int>& source, const QVector<int>& sink);
+    cv::Mat applyMask();
+    int intention(cv::Mat model, const QVector<int>& source, const QVector<int>& sink);
 
 public slots:
-	void slotLoadFile();
-	void slotClear();
-	void slotRun();
-	void slotSetVisibleLabels();
+    void slotLoadFile();
+    void slotClear();
+    void slotRun();
+    void slotSetVisibleLabels();
 };
 
 #endif // MAINWINDOW_H

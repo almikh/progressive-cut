@@ -12,14 +12,16 @@ TARGET = graph-cut
 TEMPLATE = app
 
 
-SOURCES += main.cpp\
+SOURCES +=
+        main.cpp\
         mainwindow.cpp\
-		graph.cpp
+        graph.cpp
 
-HEADERS  += mainwindow.h\
-			graph.h
+HEADERS +=
+        mainwindow.h\
+        graph.h
 
-FORMS    += mainwindow.ui
+FORMS += mainwindow.ui
 
 QMAKE_CXXFLAGS += -std=c++11
 
