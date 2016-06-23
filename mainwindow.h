@@ -1,66 +1,61 @@
-﻿#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+﻿#ifndef MAINWINDOW_H_INCLUDED__
+#define MAINWINDOW_H_INCLUDED__
 
 #include <QMainWindow>
-#include <QDoubleSpinBox>
-#include <QGraphicsView>
-#include <QComboBox>
-#include <QTime>
+#include <stdint.h>
 
 #include "graph.h"
+#include "matrix.h"
 
-using std::string;
-
-class Viewport: public QGraphicsView {
-    Q_OBJECT
-
-public:
-    QPixmap pixmap;
-    bool initialMarking;
-    QVector<int> source, sink;
-    QVector<int> currentSource, currentSink;
-
-    Viewport(QWidget *parent = 0);
-
-    void setPixmap(const QPixmap& pixmap);
-    void redrawNotes();
-
-    void wheelEvent(QWheelEvent *event) override;
-    void mousePressEvent(QMouseEvent* ev) override;
-    void mouseMoveEvent(QMouseEvent* ev) override;
-};
+class Viewport;
 
 namespace Ui {
-class MainWindow;
+  class MainWindow;
 }
 
 class MainWindow : public QMainWindow {
-    Q_OBJECT
+  Q_OBJECT
 
 public:
-    QImage source;
-    cv::Mat image;
-    cv::Mat model;
-    cv::Mat marked;
-    cv::Mat userIntention;
-    QAction* showLabels;
-    cv::Mat mask;
+  enum PixelClass {
+    Background = 0,
+    Foreground = 1
+  };
 
-    explicit MainWindow(const char* filename, QWidget *parent = 0);
-    ~MainWindow();
+  enum UserAction {
+    BF = 1,
+    FB = 2,
+    FBF_OR_BFB = 3
+  };
+
+public:
+  QImage source;
+  QImage image;
+  Matrix<bool> mask;
+  Matrix<uint8_t> model;
+  Matrix<uint8_t> marked;
+  Matrix<uint8_t> user_intention;
+  QAction* show_labels_action;
+
+  MainWindow(const QString& filename, QWidget* parent = nullptr);
+  ~MainWindow();
 
 private:
-    Ui::MainWindow *ui;
-    Viewport* viewport;
+  Ui::MainWindow* ui_;
+  Viewport* viewport_;
 
-    cv::Mat applyMask();
-    int intention(cv::Mat model, const QVector<int>& source, const QVector<int>& sink);
+  void createToolbar();
+
+  void load(const QString& filename);
+
+  QImage applyMask();
+  int intention(Matrix<uint8_t> model, const QVector<int>& source, const QVector<int>& sink);
 
 public slots:
-    void slotLoadFile();
-    void slotClear();
-    void slotRun();
-    void slotSetVisibleLabels();
+  void slotLoadFile();
+  void slotClear();
+  void slotRun();
+  void slotSetVisibleLabels();
 };
 
-#endif // MAINWINDOW_H
+#endif // MAINWINDOW_H_INCLUDED__

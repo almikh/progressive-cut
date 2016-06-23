@@ -1,238 +1,236 @@
-﻿#include "graph.h"
-#include <assert.h>
-#include <iostream>
+#include "graph.h"
 #include <QDebug>
+#include <QQueue>
 #include <QStack>
+#include <QtMath>
 #include <QTime>
-#include <queue>
 
 using namespace std;
 
-Graph::Graph(int size, const cv::Size& imageSize):
-    size(size),
-    parent(size),
-    imageSize(imageSize),
-    edges(size),
-    elapsed(0)
+Graph::Graph(int size, const QSize& image_size):
+  size_(size),
+  parent_(size),
+  image_size_(image_size),
+  edges_(size)
 {
 
 }
 
-Graph Graph::fromImage(const cv::Mat& image, cv::Mat mask) {
-    assert(image.type() == CV_8UC3);
-    //static const int dx[] = {-1, -1, -1, 0, 1, 1, 1, 0};
-    //static const int dy[] = {-1, 0, 1, 1, 1, 0, -1, -1};
-    static const int dx[] = {-1, 1, 0, 0};
-    static const int dy[] = {0, 0, 1, -1};
+Graph Graph::fromImage(const QImage& image, const Matrix<uint8_t>& mask, const Connectivity& connectivity) {
+  Q_ASSERT(image.format() == QImage::Format::Format_RGB888);
 
-    auto norm = [](const cv::Vec3b& lhs, const cv::Vec3b& rhs) -> double {
-        return sqrt(1.0*(lhs[0] - rhs[0])*(lhs[0] - rhs[0]) + (lhs[1] - rhs[1])*(lhs[1] - rhs[1]) + (lhs[2] - rhs[2])*(lhs[2] - rhs[2]));
-    };
-    auto length = [](const int& x, const int& y) -> double {
-        return sqrt(1.0*x*x + 1.0*y*y);
-    };
+  static const int dx[] = {-1, 1, 0, 0, 1, -1, 1, 1 };
+  static const int dy[] = {0, 0, 1, -1, 1, 1, -1, -1};
 
-    int edges = 0;
-    double sigma = 2.0;
-    Graph graph(image.rows*image.cols, image.size());
-    for (int y = 0; y<image.rows; ++y) {
-        for (int x = 0; x<image.cols; ++x) {
-            if (mask.data && !mask.at<int>(y, x)) continue;
+  auto norm = [](const QRgb& lhs, const QRgb& rhs) -> float {
+    float r1 = qRed(lhs), g1 = qGreen(lhs), b1 = qBlue(lhs);
+    float r2 = qRed(rhs), g2 = qGreen(rhs), b2 = qBlue(rhs);
+    return qSqrt((r1-r2)*(r1-r2) + (g1-g2)*(g1-g2) + (b1-b2)*(b1-b2));
+  };
+  auto length = [](const int& x, const int& y) -> float {
+    return qSqrt(1.0f*x*x + 1.0f*y*y);
+  };
 
-            for (int i = 0; i<4; ++i) {
-                int index = x + y*image.cols;
-                auto p = image.at<cv::Vec3b>(y, x);
-                if (x + dx[i] >= 0 && x + dx[i]<image.cols && y + dy[i] >= 0 && y + dy[i]<image.rows) {
-                    auto q = image.at<cv::Vec3b>(y + dy[i], x + dx[i]);
-                    float weight = exp(-norm(p, q) / (2*sigma)) / length(dx[i], dy[i]);
+  int edges = 0;
+  float sigma = 2.0f;
+  Graph graph(image.width()*image.height(), image.size());
+  for (int y = 0; y<image.height(); ++y) {
+    for (int x = 0; x<image.width(); ++x) {
+      if (!mask.isNull() && !mask(x, y)) continue;
 
-                    graph.addEdge(index, (x + dx[i]) + (y + dy[i])* image.cols, weight);
-                    ++edges;
-                }
-            }
+      for (int i = 0; i<static_cast<int>(connectivity); ++i) {
+        int index = x + y*image.width();
+        auto p = image.pixel(x, y);
+        if (x + dx[i] >= 0 && x + dx[i]<image.width() && y + dy[i] >= 0 && y + dy[i]<image.height()) {
+          auto q = image.pixel(x + dx[i], y + dy[i]);
+          float weight = exp(-norm(p, q) / (2.0f*sigma)) / length(dx[i], dy[i]);
+
+          graph.addEdge(index, (x + dx[i]) + (y + dy[i])* image.width(), weight);
+          ++edges;
         }
+      }
     }
+  }
 
-    graph.mask = mask;
-    qDebug() << "New graph:\n" << "  nodes:" << graph.size << "\n   edges:" << edges << "\n";
-    return graph;
+  graph.mask_ = mask.to<bool>();
+  qDebug() << "New graph:\n" << "  nodes:" << graph.size_ << "\n   edges:" << edges << "\n";
+  return graph;
 }
 
-/* Returns true if there is a path from source 's' to sink 't' in
-   residual graph. */
+// Returns true if there is a path from source 's'
+// to sink 't' in residual graph.
 int Graph::bfs(int s, int t) {
-    QTime timer;
-    timer.start();
+  visited_.fill(false);
 
-    visited.fill(false);
+  QQueue<int> q;
+  q << s;
 
-    queue<int> q;
-    q.push(s);
-    parent[s] = -1;
-    visited[s] = true;
+  parent_[s] = -1;
+  visited_[s] = true;
 
-    while (!q.empty()) {
-        int u = q.front();
-        q.pop();
+  while (!q.empty()) {
+    int u = q.front();
+    q.pop_front();
 
-        for (auto &v : rEdges[u].keys()) {
-            if (!visited[v] && qAbs(rEdges[u][v])>FLT_EPSILON) {
-                q.push(v);
-                parent[v] = u;
-                visited[v] = true;
-                if (v == t) q = queue<int>();
-            }
-        }
+    for (auto& v : r_edges_[u].keys()) {
+      if (!visited_[v] && qAbs(r_edges_[u][v])>Float::epsilon()) {
+        q << v;
+        parent_[v] = u;
+        visited_[v] = true;
+        if (v == t) q.clear();
+      }
     }
+  }
 
-    elapsed += timer.elapsed();
-    // If we reached sink in BFS starting from source, then return true, else false
-    return (visited[t] == true);
+  // if we reached sink in BFS starting from source, then return true, else false
+  return (visited_[t] == true);
 }
 
-void Graph::dfs(int s, QVector<bool>& visited) {
-    QStack<int> stack;
-    stack.push(s);
+void Graph::dfs(int s) {
+  QStack<int> stack;
+  stack.push(s);
 
-    while (!stack.isEmpty()) {
-        int s = stack.pop();
-        visited[s] = true;
+  while (!stack.isEmpty()) {
+    int s = stack.pop();
+    visited_[s] = true;
 
-        for (auto e : rEdges[s].keys()) {
-            if (!visited[e] && qAbs(rEdges[s][e])>FLT_EPSILON) {
-                stack.push(e);
-            }
-        }
+    for (auto e : r_edges_[s].keys()) {
+      if (!visited_[e] && qAbs(r_edges_[s][e])>Float::epsilon()) {
+        stack.push(e);
+      }
     }
+  }
 }
 
-void Graph::setMask(cv::Mat mask_) {
-    mask = mask_;
+void Graph::setMask(const mask_t& mask) {
+  mask_ = mask;
 }
 
 void Graph::addEdge(int i, int j, float capacity) {
-    edges[i][j] = capacity;
+  edges_[i][j] = capacity;
 }
 
-Graph::cut_t Graph::minCut(const QVector<int>& source_, const QVector<int>& sink_) {
-    int source = edges.size(), sink = edges.size() + 1;
+Graph::cut_t Graph::minCut(const QVector<int>& sources, const QVector<int>& sinks) {
+  int source = edges_.size(), sink = edges_.size() + 1;
 
-    edges.push_back(QMap<int, flow_t>());
-    edges.push_back(QMap<int, flow_t>());
-    for (auto s : source_) {
-        if (!mask.data || mask.at<int>(s / imageSize.width, s % imageSize.width)) {
-            edges[source][s] = 100500;
-        }
+  edges_ << QMap<int, flow_t>();
+  edges_ << QMap<int, flow_t>();
+
+  for (auto s : sources) {
+    if (mask_.isNull() || mask_(s % image_size_.width(), s / image_size_.width())) {
+      edges_[source][s] = 100500;
     }
-    for (auto t : sink_) {
-        if (!mask.data || mask.at<int>(t / imageSize.width, t % imageSize.width)) {
-            edges[t][sink] = 100500;
-        }
+  }
+
+  for (auto t : sinks) {
+    if (mask_.isNull() || mask_(t % image_size_.width(), t / image_size_.width())) {
+      edges_[t][sink] = 100500;
     }
+  }
 
-    size = edges.size();
-    parent.resize(size);
-    visited.resize(size);
+  size_ = edges_.size();
+  parent_.resize(size_);
+  visited_.resize(size_);
 
-    rEdges = edges;
+  r_edges_ = edges_;
 
-    while (bfs(source, sink)) {
-        float path_flow = FLT_MAX;
-        for (int v = sink; v != source; v = parent[v]) {
-            int u = parent[v];
-            path_flow = min(path_flow, rEdges[u][v]);
-        }
-
-        // update residual capacities of the edges and reverse edges along the path
-        for (int v = sink; v != source; v = parent[v]) {
-            int u = parent[v];
-            rEdges[u][v] -= path_flow;
-            rEdges[v][u] += path_flow;
-        }
+  while (bfs(source, sink)) {
+    float path_flow = Float::max();
+    for (int v = sink; v != source; v = parent_[v]) {
+      int u = parent_[v];
+      path_flow = qMin(path_flow, r_edges_[u][v]);
     }
 
-    visited.fill(false);
-    dfs(source, visited);
-
-    QVector<pair<int, int>> cut;
-    for (int i = 0; i<size; ++i) {
-        if (!visited[i]) continue;
-        for (auto j : edges[i].keys()) {
-            if (!visited[j] && edges[i][j]) {
-                cut.push_back(make_pair(i, j));
-            }
-        }
+    // update residual capacities of the edges and reverse edges along the path
+    for (int v = sink; v != source; v = parent_[v]) {
+      int u = parent_[v];
+      r_edges_[u][v] -= path_flow;
+      r_edges_[v][u] += path_flow;
     }
+  }
 
-    return cut;
+  visited_.fill(false);
+  dfs(source);
+
+  QVector<QPair<int, int>> cut;
+  for (int i = 0; i<size_; ++i) {
+    if (!visited_[i]) continue;
+    for (auto j : edges_[i].keys()) {
+      if (!visited_[j] && edges_[i][j]) {
+        cut.push_back(qMakePair(i, j));
+      }
+    }
+  }
+
+  return cut;
 }
 
-QVector<int> Graph::getForeground(const Graph::cut_t& cut_) {
-    int source = edges.size() - 2;
-    QVector<bool> cut(size, false);
-    QStack<int> stack;
-    stack.push(source);
+QVector<int> Graph::getForeground(const Graph::cut_t& indices) {
+  int source = edges_.size() - 2;
+  QVector<bool> cut(size_, false);
+  QStack<int> stack;
+  stack.push(source);
 
-    for (auto &e : cut_) {
-        cut[e.first] = cut[e.second] = true;
+  for (auto &e : indices) {
+    cut[e.first] = cut[e.second] = true;
+  }
+
+  visited_.fill(false);
+  while (!stack.isEmpty()) {
+    int s = stack.pop();
+    visited_[s] = true;
+
+    for (auto e : r_edges_[s].keys()) {
+      if (!visited_[e] && !cut[e] && !cut[s]) {
+        stack.push(e);
+      }
     }
+  }
 
-    visited.fill(false);
-    while (!stack.isEmpty()) {
-        int s = stack.pop();
-        visited[s] = true;
-
-        for (auto e : rEdges[s].keys()) {
-            if (!visited[e] && !cut[e] && !cut[s]) {
-                stack.push(e);
-            }
-        }
+  QVector<int> foreground;
+  for (int i = 0; i<visited_.size()-2; ++i) {
+    if (visited_[i]) {
+      int y = i / image_size_.width(), x = i % image_size_.width();
+      if (mask_.isNull() || mask_(x, y)) {
+        foreground.push_back(i);
+      }
     }
+  }
 
-    QVector<int> foreground;
-    for (int i = 0; i<visited.size()-2; ++i) {
-        if (visited[i]) {
-            int y = i / imageSize.width, x = i % imageSize.width;
-            if (!mask.data || mask.at<int>(y, x)) {
-                foreground.push_back(i);
-            }
-        }
-    }
-
-    return foreground;
+  return foreground;
 }
 
-QVector<int> Graph::getBackground(const Graph::cut_t& cut_) {
-    int source = edges.size() - 2;
-    QVector<bool> cut(size, false);
-    QStack<int> stack;
-    stack.push(source);
+QVector<int> Graph::getBackground(const Graph::cut_t& indices) {
+  int source = edges_.size() - 2;
+  QVector<bool> cut(size_, false);
+  QStack<int> stack;
+  stack.push(source);
 
-    for (auto &e : cut_) {
-        cut[e.first] = cut[e.second] = true;
+  for (auto &e : indices) {
+    cut[e.first] = cut[e.second] = true;
+  }
+
+  visited_.fill(false);
+  while (!stack.isEmpty()) {
+    int s = stack.pop();
+    visited_[s] = true;
+
+    for (auto e : r_edges_[s].keys()) {
+      if (!visited_[e] && !cut[e] && !cut[s]) {
+        stack.push(e);
+      }
     }
+  }
 
-    visited.fill(false);
-    while (!stack.isEmpty()) {
-        int s = stack.pop();
-        visited[s] = true;
-
-        for (auto e : rEdges[s].keys()) {
-            if (!visited[e] && !cut[e] && !cut[s]) {
-                stack.push(e);
-            }
-        }
+  QVector<int> background;
+  for (int i = 0; i<visited_.size() - 2; ++i) {
+    if (!visited_[i]) {
+      int y = i / image_size_.width(), x = i % image_size_.width();
+      if (mask_.isNull() || mask_(x, y)) {
+        background.push_back(i);
+      }
     }
+  }
 
-    QVector<int> background;
-    for (int i = 0; i<visited.size() - 2; ++i) {
-        if (!visited[i]) {
-            int y = i / imageSize.width, x = i % imageSize.width;
-            if (!mask.data || mask.at<int>(y, x)) {
-                background.push_back(i);
-            }
-        }
-    }
-
-    return background;
+  return background;
 }

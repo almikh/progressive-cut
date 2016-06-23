@@ -1,43 +1,50 @@
-﻿#pragma once
+#pragma once
+#include <limits>
 #include <QVector>
+#include <stdint.h>
 #include <QImage>
+#include <QPair>
 #include <QMap>
-#include <QSet>
-#include <utility>
 
-#include <opencv2/core/core.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
+using Float = std::numeric_limits<float>;
 
-using namespace std;
+#include "matrix.h"
 
 class Graph {
-    int size;
-    QVector<int> parent;
-    QVector<bool> visited;
-    cv::Size imageSize;
-    cv::Mat mask;
-
-    int bfs(int s, int t);
-    void dfs(int s, QVector<bool>& visited);
 public:
-    int elapsed;
-    typedef float flow_t;
-    typedef QVector<pair<int, int>> cut_t;
+  using flow_t = float;
+  using cut_t = QVector<QPair<int, int>>;
+  using mask_t = Matrix<bool>;
 
-    QVector<QMap<int, flow_t>> edges;
-    QVector<QMap<int, flow_t>> rEdges;
+  enum class Connectivity {
+    Four = 4,
+    Eight = 8
+  };
 
-    Graph(int size, const cv::Size& imageSize);
+private:
+  QVector<int> parent_;
+  QVector<bool> visited_;
+  QSize image_size_;
+  mask_t mask_;
+  int size_;
 
-    static Graph fromImage(const cv::Mat& image, cv::Mat mask);
+  QVector<QMap<int, flow_t>> edges_;
+  QVector<QMap<int, flow_t>> r_edges_;
 
-    void setMask(cv::Mat mask);
+  int bfs(int s, int t);
+  void dfs(int s);
 
-    void addEdge(int i, int j, float capacity);
+public:
+  Graph(int size, const QSize& image_size);
 
-    cut_t minCut(const QVector<int>& source, const QVector<int>& sink);
+  static Graph fromImage(const QImage& image, const Matrix<uint8_t>& mask, const Connectivity& connectivity = Connectivity::Four);
 
-    QVector<int> getForeground(const cut_t& cut);
-    QVector<int> getBackground(const cut_t& cut);
+  void setMask(const mask_t& mask);
+
+  void addEdge(int i, int j, float capacity);
+
+  cut_t minCut(const QVector<int>& sources, const QVector<int>& sinks);
+
+  QVector<int> getForeground(const cut_t& indices);
+  QVector<int> getBackground(const cut_t& indices);
 };
